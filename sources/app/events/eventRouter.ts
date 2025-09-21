@@ -135,6 +135,12 @@ export type UpdateEvent = {
     uid: string;
     status: 'none' | 'requested' | 'pending' | 'friend' | 'rejected';
     timestamp: number;
+} | {
+    type: 'new-feed-post';
+    id: string;
+    body: any;
+    cursor: string;
+    createdAt: number;
 };
 
 // === EPHEMERAL EVENT TYPES (Transient) ===
@@ -183,7 +189,7 @@ export interface EphemeralPayload {
 
 // === EVENT ROUTER CLASS ===
 
-export class EventRouter {
+class EventRouter {
     private userConnections = new Map<string, Set<ClientConnection>>();
 
     // === CONNECTION MANAGEMENT ===
@@ -300,6 +306,8 @@ export class EventRouter {
         }
     }
 }
+
+export const eventRouter = new EventRouter();
 
 // === EVENT BUILDER FUNCTIONS ===
 
@@ -550,6 +558,26 @@ export function buildRelationshipUpdatedEvent(
         body: {
             t: 'relationship-updated',
             ...data
+        },
+        createdAt: Date.now()
+    };
+}
+
+export function buildNewFeedPostUpdate(feedItem: {
+    id: string;
+    body: any;
+    cursor: string;
+    createdAt: number;
+}, updateSeq: number, updateId: string): UpdatePayload {
+    return {
+        id: updateId,
+        seq: updateSeq,
+        body: {
+            t: 'new-feed-post',
+            id: feedItem.id,
+            body: feedItem.body,
+            cursor: feedItem.cursor,
+            createdAt: feedItem.createdAt
         },
         createdAt: Date.now()
     };

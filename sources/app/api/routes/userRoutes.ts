@@ -2,11 +2,11 @@ import { z } from "zod";
 import { Fastify } from "../types";
 import { db } from "@/storage/db";
 import { RelationshipStatus } from "@prisma/client";
-import { getPublicUrl } from "@/storage/files";
 import { friendAdd } from "@/app/social/friendAdd";
 import { Context } from "@/context";
 import { friendRemove } from "@/app/social/friendRemove";
 import { friendList } from "@/app/social/friendList";
+import { buildUserProfile } from "@/app/social/type";
 
 export async function userRoutes(app: Fastify) {
 
@@ -39,7 +39,7 @@ export async function userRoutes(app: Fastify) {
             }
         });
 
-        if (!user || !user.githubUser) {
+        if (!user) {
             return reply.code(404).send({ error: 'User not found' });
         }
 
@@ -54,24 +54,11 @@ export async function userRoutes(app: Fastify) {
 
         // Build user profile
         return reply.send({
-            user: {
-                id: user.id,
-                firstName: user.firstName || '',
-                lastName: user.lastName,
-                avatar: user.avatar ? {
-                    path: user.avatar.path,
-                    url: getPublicUrl(user.avatar.path),
-                    width: user.avatar.width,
-                    height: user.avatar.height,
-                    thumbhash: user.avatar.thumbhash
-                } : null,
-                username: user.githubUser.profile.login,
-                status: status
-            }
+            user: buildUserProfile(user, status)
         });
     });
 
-    // Search for user
+    // Search for users
     app.get('/v1/user/search', {
         schema: {
             querystring: z.object({
@@ -79,10 +66,7 @@ export async function userRoutes(app: Fastify) {
             }),
             response: {
                 200: z.object({
-                    user: UserProfileSchema
-                }),
-                404: z.object({
-                    error: z.literal('User not found')
+                    users: z.array(UserProfileSchema)
                 })
             }
         },
@@ -90,49 +74,37 @@ export async function userRoutes(app: Fastify) {
     }, async (request, reply) => {
         const { query } = request.query;
 
-        // Search for user
-        const user = await db.account.findFirst({
+        // Search for users by username, first 10 matches
+        const users = await db.account.findMany({
             where: {
-                githubUser: {
-                    profile: {
-                        path: ['login'],
-                        equals: query
-                    }
+                username: {
+                    startsWith: query,
+                    mode: 'insensitive'
                 }
             },
             include: {
                 githubUser: true
+            },
+            take: 10,
+            orderBy: {
+                username: 'asc'
             }
         });
 
-        if (!user || !user.githubUser) {
-            return reply.code(404).send({ error: 'User not found' });
-        }
-
-        // Resolve relationship status
-        const relationship = await db.userRelationship.findFirst({
-            where: {
-                fromUserId: request.userId,
-                toUserId: user.id
-            }
-        });
-        const status: RelationshipStatus = relationship?.status || RelationshipStatus.none;
+        // Resolve relationship status for each user
+        const userProfiles = await Promise.all(users.map(async (user) => {
+            const relationship = await db.userRelationship.findFirst({
+                where: {
+                    fromUserId: request.userId,
+                    toUserId: user.id
+                }
+            });
+            const status: RelationshipStatus = relationship?.status || RelationshipStatus.none;
+            return buildUserProfile(user, status);
+        }));
 
         return reply.send({
-            user: {
-                id: user.id,
-                firstName: user.firstName || '',
-                lastName: user.lastName,
-                avatar: user.avatar ? {
-                    path: user.avatar.path,
-                    url: getPublicUrl(user.avatar.path),
-                    width: user.avatar.width,
-                    height: user.avatar.height,
-                    thumbhash: user.avatar.thumbhash
-                } : null,
-                username: user.githubUser.profile.login,
-                status: status
-            }
+            users: userProfiles
         });
     });
 
@@ -144,7 +116,7 @@ export async function userRoutes(app: Fastify) {
             }),
             response: {
                 200: z.object({
-                    user: UserProfileSchema
+                    user: UserProfileSchema.nullable()
                 }),
                 404: z.object({
                     error: z.literal('User not found')
@@ -154,9 +126,6 @@ export async function userRoutes(app: Fastify) {
         preHandler: app.authenticate
     }, async (request, reply) => {
         const user = await friendAdd(Context.create(request.userId), request.body.uid);
-        if (!user) {
-            return reply.code(404).send({ error: 'User not found' });
-        }
         return reply.send({ user });
     });
 
@@ -167,7 +136,7 @@ export async function userRoutes(app: Fastify) {
             }),
             response: {
                 200: z.object({
-                    user: UserProfileSchema
+                    user: UserProfileSchema.nullable()
                 }),
                 404: z.object({
                     error: z.literal('User not found')
@@ -177,9 +146,6 @@ export async function userRoutes(app: Fastify) {
         preHandler: app.authenticate
     }, async (request, reply) => {
         const user = await friendRemove(Context.create(request.userId), request.body.uid);
-        if (!user) {
-            return reply.code(404).send({ error: 'User not found' });
-        }
         return reply.send({ user });
     });
 
@@ -212,5 +178,6 @@ const UserProfileSchema = z.object({
         thumbhash: z.string().optional()
     }).nullable(),
     username: z.string(),
+    bio: z.string().nullable(),
     status: RelationshipStatusSchema
 });

@@ -1,12 +1,12 @@
 import { Context } from "@/context";
 import { buildUserProfile, UserProfile } from "./type";
-import { db } from "@/storage/db";
+import { inTx } from "@/storage/inTx";
 import { RelationshipStatus } from "@prisma/client";
 import { relationshipSet } from "./relationshipSet";
 import { relationshipGet } from "./relationshipGet";
 
 export async function friendRemove(ctx: Context, uid: string): Promise<UserProfile | null> {
-    return await db.$transaction(async (tx) => {
+    return await inTx(async (tx) => {
 
         // Read current user objects
         const currentUser = await tx.account.findUnique({
@@ -17,7 +17,7 @@ export async function friendRemove(ctx: Context, uid: string): Promise<UserProfi
             where: { id: uid },
             include: { githubUser: true }
         });
-        if (!currentUser || !currentUser.githubUser || !targetUser || !targetUser.githubUser) {
+        if (!currentUser || !targetUser) {
             return null;
         }
 
