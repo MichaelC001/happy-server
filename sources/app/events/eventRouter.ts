@@ -131,6 +131,9 @@ export type UpdateEvent = {
     type: 'delete-artifact';
     artifactId: string;
 } | {
+    type: 'delete-session';
+    sessionId: string;
+} | {
     type: 'relationship-updated';
     uid: string;
     status: 'none' | 'requested' | 'pending' | 'friend' | 'rejected';
@@ -141,6 +144,13 @@ export type UpdateEvent = {
     body: any;
     cursor: string;
     createdAt: number;
+} | {
+    type: 'kv-batch-update';
+    changes: Array<{
+        key: string;
+        value: string | null; // null indicates deletion
+        version: number; // -1 for deleted keys
+    }>;
 };
 
 // === EPHEMERAL EVENT TYPES (Transient) ===
@@ -386,6 +396,18 @@ export function buildUpdateSessionUpdate(sessionId: string, updateSeq: number, u
     };
 }
 
+export function buildDeleteSessionUpdate(sessionId: string, updateSeq: number, updateId: string): UpdatePayload {
+    return {
+        id: updateId,
+        seq: updateSeq,
+        body: {
+            t: 'delete-session',
+            sid: sessionId
+        },
+        createdAt: Date.now()
+    };
+}
+
 export function buildUpdateAccountUpdate(userId: string, profile: Partial<AccountProfile>, updateSeq: number, updateId: string): UpdatePayload {
     return {
         id: updateId,
@@ -578,6 +600,22 @@ export function buildNewFeedPostUpdate(feedItem: {
             body: feedItem.body,
             cursor: feedItem.cursor,
             createdAt: feedItem.createdAt
+        },
+        createdAt: Date.now()
+    };
+}
+
+export function buildKVBatchUpdateUpdate(
+    changes: Array<{ key: string; value: string | null; version: number }>,
+    updateSeq: number,
+    updateId: string
+): UpdatePayload {
+    return {
+        id: updateId,
+        seq: updateSeq,
+        body: {
+            t: 'kv-batch-update',
+            changes
         },
         createdAt: Date.now()
     };

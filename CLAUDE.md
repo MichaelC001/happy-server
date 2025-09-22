@@ -160,6 +160,7 @@ The project has pending Prisma migrations that need to be applied:
 - Routes are in `/sources/apps/api/routes`
 - Use Fastify with Zod for type-safe route definitions
 - Always validate inputs using Zod
+- **Idempotency**: Design all operations to be idempotent - clients may retry requests automatically and the backend must handle multiple invocations of the same operation gracefully, producing the same result as a single invocation
 
 ## Docker Deployment
 
@@ -277,3 +278,4 @@ tail -500 .logs/*.log | grep "applySessions.*active" | tail -10
 - do not run non-transactional things (like uploadign files) in transactions
 - After writing an action - add a documentation comment that explains logic, also keep it in sync.
 - always use github usernames
+- Always use privacyKit.decodeBase64 and privacyKit.encodeBase64 from privacy-kit instead of using buffer
